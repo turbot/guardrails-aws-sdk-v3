@@ -26,12 +26,7 @@ const proxyAgent = () => {
     // AWS to fail at scale, leaving Turbot inoperable.
     // Instead, log the error and continue with no proxy. That may not work
     // either, but is better than a bad configuration locking us out completely.
-    log.error(
-      errors.badConfiguration(
-        "Invalid URL configuration in aws.proxy.https_proxy",
-        { error: e },
-      ),
-    );
+    log.error(errors.badConfiguration("Invalid URL configuration in aws.proxy.https_proxy", { error: e }));
     return null;
   }
 
@@ -41,8 +36,6 @@ const proxyAgent = () => {
 };
 
 const connect = function (serviceClient, params, opts = {}) {
-
-
   if (!params) params = {};
 
   // If running in Lambda setup, set the default region based on the:
@@ -73,13 +66,10 @@ const connect = function (serviceClient, params, opts = {}) {
   }
 
   if (_.isEmpty(params.retryStrategy)) {
-    params.retryStrategy = new CustomRetryStrategy(
-      params.maxAttempts || defaultMaxRetries,
-    );
+    params.retryStrategy = new CustomRetryStrategy(params.maxAttempts || defaultMaxRetries);
   }
 
   return new serviceClient(params);
-
 };
 
 const defaultCustomBackoff = (retryCount) => {
@@ -172,9 +162,7 @@ const discoveryParams = (region) => {
   return {
     region: region,
     maxAttempts: defaultMaxRetriesForDiscovery,
-    retryStrategy: new CustomDiscoveryRetryStrategy(
-      defaultMaxRetriesForDiscovery,
-    ),
+    retryStrategy: new CustomDiscoveryRetryStrategy(defaultMaxRetriesForDiscovery),
   };
 };
 
