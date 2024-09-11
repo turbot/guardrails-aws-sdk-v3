@@ -219,4 +219,5 @@ module.exports = {
   connect,
   customBackoff: customBackoffForDiscovery,
   discoveryParams,
+  CustomDiscoveryRetryStrategy,
 };
