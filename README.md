@@ -14,7 +14,7 @@ A lightweight, Turbot-specific wrapper around AWS SDK v3, designed to simplify a
 To install the package, use the following command:
 
 ```bash
-npm install @turbot/aws-sdk-v3
+npm install @turbot/guardrails-aws-sdk-v3
 ```
 
 
@@ -24,7 +24,7 @@ npm install @turbot/aws-sdk-v3
 ### Basic Example
 
 ```javascript
-const taws = require("@turbot/aws-sdk-v3");
+const taws = require("@turbot/guardrails-aws-sdk-v3");
 const { S3Client, ListBucketsCommand } = require("@aws-sdk/client-s3");
 
 const connParams = {};
@@ -45,7 +45,7 @@ listS3Buckets();
 
 ### Proxy Server Support
 
-`@turbot/aws-sdk-v3` automatically detects the proxy settings from the environment variables (`HTTPS_PROXY` or `https_proxy`) and applies the proxy settings to AWS SDK service calls.
+`@turbot/guardrails-aws-sdk-v3` automatically detects the proxy settings from the environment variables (`HTTPS_PROXY` or `https_proxy`) and applies the proxy settings to AWS SDK service calls.
 
 
 ### Custom Configuration
@@ -53,7 +53,7 @@ listS3Buckets();
 If you have specific configurations such as custom user agents, retries, or timeouts, you can easily extend the AWS clients with these settings:
 
 ```javascript
-const taws = require("@turbot/aws-sdk-v3");
+const taws = require("@turbot/guardrails-aws-sdk-v3");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const connParams = {
   region: "us-west-2",
