@@ -1,4 +1,4 @@
-# @turbot/guardrails-aws-sdk
+# @turbot/guardrails-aws-sdk-v3
 
 A lightweight, Turbot-specific wrapper around AWS SDK v3, designed to simplify and standardize common AWS interactions within Turbot. This wrapper includes built-in support for:
 
