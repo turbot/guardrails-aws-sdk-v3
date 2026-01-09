@@ -1,12 +1,11 @@
 // Use CommonJS 'require' instead of 'import'
 
-const _ = require("lodash");
+const aws4 = require("aws4");
 const errors = require("@turbot/errors");
 const log = require("@turbot/log");
 const { HttpsProxyAgent } = require("https-proxy-agent");
 const { NodeHttpHandler } = require("@aws-sdk/node-http-handler");
 const { StandardRetryStrategy } = require("@aws-sdk/util-retry");
-const { URL } = require("url");
 
 const defaultMaxRetries = 3;
 
@@ -57,15 +56,15 @@ const connect = function (serviceClient, params, opts = {}) {
   // SigV4 ensures that requests are authenticated and authorized using access keys or assumed roles.
   // https://stackoverflow.com/questions/71791321/specifying-the-signature-version-of-s3-client-in-aws-sdk-version-3
 
-  if (!_.isEmpty(params.customUserAgent)) {
+  if (!params.customUserAgent) {
     params.customUserAgent = "Turbot/5 (APN_137229)";
   }
 
-  if (_.isEmpty(params.maxAttempts)) {
+  if (params.maxAttempts == null) {
     params.maxAttempts = defaultMaxRetries;
   }
 
-  if (_.isEmpty(params.retryStrategy)) {
+  if (!params.retryStrategy) {
     params.retryStrategy = new CustomRetryStrategy(params.maxAttempts || defaultMaxRetries);
   }
 
