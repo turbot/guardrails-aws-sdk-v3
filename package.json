@@ -12,27 +12,23 @@
   "dependencies": {
     "@turbot/errors": "5.3.0",
     "@turbot/log": "5.5.0",
-    "@aws-sdk/middleware-retry": "3.374.0",
     "@aws-sdk/node-http-handler": "3.374.0",
     "@aws-sdk/util-retry": "3.374.0",
-    "https-proxy-agent": "7.0.5",
-    "lodash": "4.17.21",
-    "url": "^0.11.4"
+    "aws4": "^1.13.2",
+    "https-proxy-agent": "7.0.5"
   },
   "devDependencies": {
     "chai": "4.3.10",
     "eslint": "7.28.0",
     "eslint-config-prettier": "8.3.0",
     "eslint-plugin-prettier": "3.4.0",
-    "eslint-plugin-you-dont-need-lodash-underscore": "6.12.0",
     "prettier": "2.3.1",
     "test-console": "1.1.0"
   },
   "eslintConfig": {
     "extends": [
       "plugin:prettier/recommended",
-      "eslint:recommended",
-      "plugin:you-dont-need-lodash-underscore/compatible"
+      "eslint:recommended"
     ],
     "env": {
       "es6": true,
@@ -43,8 +39,7 @@
       "ecmaVersion": 10
     },
     "rules": {
-      "no-console": "off",
-      "you-dont-need-lodash-underscore/is-nil": "off"
+      "no-console": "off"
     }
   },
   "prettier": {
