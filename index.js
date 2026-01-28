@@ -7,15 +7,46 @@ const { HttpsProxyAgent } = require("https-proxy-agent");
 const { NodeHttpHandler } = require("@aws-sdk/node-http-handler");
 const { StandardRetryStrategy } = require("@aws-sdk/util-retry");
 const { URL } = require("url");
+const aws4 = require("aws4");
+const micromatch = require("micromatch");
 
 const defaultMaxRetries = 3;
 
-const proxyAgent = () => {
-  const proxy = process.env.https_proxy || process.env.HTTPS_PROXY;
+const proxyAgent = (serviceClient, turbotConfig) => {
+  // Get the proxy configuration from the provided turbotConfig
+  // Clone the proxy configuration to avoid mutating the original
+  let awsProxy = turbotConfig?.aws?.proxy ? _.cloneDeep(turbotConfig.aws.proxy) : {};
+
+  // Set defaults
+  _.defaults(awsProxy, {
+    https_proxy: process.env.https_proxy || process.env.HTTPS_PROXY,
+    enabled: ["*"],
+    disabled: [],
+  });
+
+  const proxy = awsProxy.https_proxy;
 
   // If there is no proxy defined, we have nothing to do.
   if (!proxy) {
     return null;
+  }
+
+  // Check if this service should use the proxy
+  if (serviceClient) {
+    const serviceName = serviceClient.name.replace(/Client$/, "").toLowerCase();
+    const serviceLower = serviceName.toLowerCase();
+
+    // Check if service is explicitly disabled
+    const disabledServices = awsProxy.disabled.map((i) => i.toLowerCase());
+    if (micromatch.any(serviceLower, disabledServices)) {
+      return null;
+    }
+
+    // Check if service is enabled (must match at least one pattern)
+    const enabledServices = awsProxy.enabled.map((i) => i.toLowerCase());
+    if (!micromatch.any(serviceLower, enabledServices)) {
+      return null;
+    }
   }
 
   let proxyObj;
@@ -35,18 +66,42 @@ const proxyAgent = () => {
   return agent;
 };
 
-const connect = function (serviceClient, params, opts = {}) {
-  if (!params) params = {};
+const connect = function (serviceClient, params) {
+  if (!params) {
+    params = {};
+  }
+
+  // Parse TURBOT_CONFIG_ENV
+  let turbotConfig = {};
+  if (process.env.TURBOT_CONFIG_ENV) {
+    try {
+      turbotConfig = JSON.parse(process.env.TURBOT_CONFIG_ENV);
+    } catch (e) {
+      log.error(errors.badConfiguration("Error parsing TURBOT_CONFIG_ENV", { error: e }));
+      turbotConfig = {};
+    }
+  }
+
+  // Development mode: load credentials from profile
+  if (process.env.NODE_ENV === "local-development") {
+    if (process.env.TURBOT_DEV_PROFILE && !params.credentials) {
+      const { fromIni } = require("@aws-sdk/credential-providers");
+      params.credentials = fromIni({ profile: process.env.TURBOT_DEV_PROFILE });
+    }
+    if (process.env.TURBOT_DEV_MASTER_REGION && !params.region) {
+      params.region = process.env.TURBOT_DEV_MASTER_REGION;
+    }
+  }
 
   // If running in Lambda setup, set the default region based on the:
   // https://docs.aws.amazon.com/lambda/latest/dg/current-supported-versions.html
-  // AWS_DEFAULT_REGION is the first preference
+  // Precedence: params.region > AWS_DEFAULT_REGION > turbotConfig.env.region
   if (!params.region) {
-    params.region = process.env.AWS_DEFAULT_REGION;
+    params.region = process.env.AWS_DEFAULT_REGION || turbotConfig?.env?.region;
   }
 
   // If they have a proxy, configure the agent.
-  let proxy = proxyAgent();
+  let proxy = proxyAgent(serviceClient, turbotConfig);
   if (proxy) {
     params.requestHandler = new NodeHttpHandler({
       httpsAgent: proxy, // Attach the proxy agent to the request handler
@@ -56,6 +111,9 @@ const connect = function (serviceClient, params, opts = {}) {
   // AWS SDK v3 uses Signature Version 4 (SigV4) for securely signing all API requests.
   // SigV4 ensures that requests are authenticated and authorized using access keys or assumed roles.
   // https://stackoverflow.com/questions/71791321/specifying-the-signature-version-of-s3-client-in-aws-sdk-version-3
+  if (!params.signatureVersion) {
+    params.signatureVersion = "v4";
+  }
 
   if (!_.isEmpty(params.customUserAgent)) {
     params.customUserAgent = "Turbot/5 (APN_137229)";
@@ -106,7 +164,7 @@ class CustomRetryStrategy extends StandardRetryStrategy {
   }
 
   // Override the `delayDecider` method to use the custom backoff function
-  delayDecider(delayBase, attemptCount) {
+  delayDecider(_delayBase, attemptCount) {
     return defaultCustomBackoff(attemptCount); // Use the custom backoff logic
   }
 }
@@ -151,7 +209,7 @@ class CustomDiscoveryRetryStrategy extends StandardRetryStrategy {
   }
 
   // Override the `delayDecider` method to use the custom backoff function
-  delayDecider(delayBase, attemptCount) {
+  delayDecider(_delayBase, attemptCount) {
     return customBackoffForDiscovery(attemptCount); // Use the custom backoff logic
   }
 }
@@ -219,5 +277,6 @@ module.exports = {
   connect,
   customBackoff: customBackoffForDiscovery,
   discoveryParams,
+  CustomRetryStrategy,
   CustomDiscoveryRetryStrategy,
 };
