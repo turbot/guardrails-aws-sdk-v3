@@ -1,6 +1,6 @@
-const { expect } = require("chai");
-const { S3Client } = require("@aws-sdk/client-s3");
-const taws = require("../index");
+import { expect } from "chai";
+import { S3Client } from "@aws-sdk/client-s3";
+import taws from "../index.js";
 
 describe("retryStrategies", () => {
   describe("when using CustomRetryStrategy", () => {

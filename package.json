@@ -4,7 +4,14 @@
   "description": "Turbot guardrails-aws-sdk-v3 wrapper.",
   "version": "5.0.1",
   "license": "Apache-2.0",
+  "type": "module",
   "main": "index.js",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./index.cjs"
+    }
+  },
   "scripts": {
     "coverage": "npx nyc npm test",
     "test": "npx mocha"
@@ -12,49 +19,30 @@
   "dependencies": {
     "@turbot/errors": "5.3.0",
     "@turbot/log": "5.5.0",
-    "@aws-sdk/credential-providers": "^3.374.0",
+    "@aws-sdk/credential-providers": "3.978.0",
     "@aws-sdk/middleware-retry": "3.374.0",
     "@aws-sdk/node-http-handler": "3.374.0",
     "@aws-sdk/util-retry": "3.374.0",
     "aws4": "1.13.2",
-    "https-proxy-agent": "7.0.5",
-    "lodash": "4.17.21",
+    "https-proxy-agent": "7.0.6",
+    "lodash": "4.17.23",
     "micromatch": "4.0.8",
-    "url": "^0.11.4"
+    "url": "0.11.4"
   },
   "devDependencies": {
-    "@aws-sdk/client-cloudwatch": "^3.971.0",
-    "@aws-sdk/client-s3": "^3.971.0",
-    "@aws-sdk/client-sts": "^3.971.0",
-    "@aws-sdk/credential-providers": "^3.971.0",
-    "chai": "^4.3.10",
-    "eslint": "7.28.0",
-    "eslint-config-prettier": "8.3.0",
-    "eslint-plugin-prettier": "3.4.0",
-    "eslint-plugin-you-dont-need-lodash-underscore": "6.12.0",
-    "mocha": "^11.7.5",
-    "nock": "^14.0.10",
-    "prettier": "2.3.1",
-    "test-console": "1.1.0"
-  },
-  "eslintConfig": {
-    "extends": [
-      "plugin:prettier/recommended",
-      "eslint:recommended",
-      "plugin:you-dont-need-lodash-underscore/compatible"
-    ],
-    "env": {
-      "es6": true,
-      "node": true,
-      "mocha": true
-    },
-    "parserOptions": {
-      "ecmaVersion": 2020
-    },
-    "rules": {
-      "no-console": "off",
-      "you-dont-need-lodash-underscore/is-nil": "off"
-    }
+    "@aws-sdk/client-cloudwatch": "3.978.0",
+    "@aws-sdk/client-s3": "3.978.0",
+    "@aws-sdk/client-sts": "3.978.0",
+    "@aws-sdk/credential-providers": "3.978.0",
+    "chai": "6.2.2",
+    "eslint": "9.39.2",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-prettier": "5.5.5",
+    "eslint-plugin-you-dont-need-lodash-underscore": "6.14.0",
+    "globals": "16.1.0",
+    "mocha": "11.7.5",
+    "nock": "14.0.10",
+    "prettier": "3.8.1"
   },
   "prettier": {
     "printWidth": 120

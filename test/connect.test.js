@@ -1,7 +1,7 @@
-const { expect } = require("chai");
-const { S3Client } = require("@aws-sdk/client-s3");
-const { CloudWatchClient } = require("@aws-sdk/client-cloudwatch");
-const taws = require("../index");
+import { expect } from "chai";
+import { S3Client } from "@aws-sdk/client-s3";
+import { CloudWatchClient } from "@aws-sdk/client-cloudwatch";
+import taws from "../index.js";
 
 describe("connect", () => {
   let originalEnv;

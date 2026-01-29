@@ -1,6 +1,6 @@
-const { expect } = require("chai");
-const nock = require("nock");
-const taws = require("../index");
+import { expect } from "chai";
+import nock from "nock";
+import taws from "../index.js";
 
 describe("awsIamSignedRequest", () => {
   afterEach(() => {
