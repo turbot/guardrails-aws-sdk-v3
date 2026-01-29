@@ -260,15 +260,16 @@ describe("connect", () => {
   });
 
   describe("when handling proxy edge cases", () => {
-    it("should verify requestHandler is set when proxy is enabled", () => {
+    it("should verify requestHandler is set when proxy is enabled", async () => {
       process.env.HTTPS_PROXY = "http://proxy:8080";
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3.config.requestHandler).to.exist;
-      // Custom requestHandler (with proxy) doesn't have 'config' property
-      expect(s3.config.requestHandler).not.to.have.property("config");
+      // Custom requestHandler (with proxy) has HttpsProxyAgent as httpsAgent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
     });
 
-    it("should verify requestHandler is not set when proxy is disabled", () => {
+    it("should verify requestHandler is not set when proxy is disabled", async () => {
       process.env.TURBOT_CONFIG_ENV = JSON.stringify({
         aws: {
           proxy: {
@@ -279,17 +280,19 @@ describe("connect", () => {
         },
       });
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
-      // SDK creates default requestHandler which has 'config' property
-      expect(s3.config.requestHandler).to.have.property("config");
+      // SDK creates default requestHandler which uses standard Agent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("Agent");
     });
 
-    it("should verify requestHandler is not set when no proxy configured", () => {
+    it("should verify requestHandler is not set when no proxy configured", async () => {
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
-      // SDK creates default requestHandler which has 'config' property
-      expect(s3.config.requestHandler).to.have.property("config");
+      // SDK creates default requestHandler which uses standard Agent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("Agent");
     });
 
-    it("should handle empty enabled array (no services proxied)", () => {
+    it("should handle empty enabled array (no services proxied)", async () => {
       process.env.TURBOT_CONFIG_ENV = JSON.stringify({
         aws: {
           proxy: {
@@ -301,11 +304,12 @@ describe("connect", () => {
       });
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
-      // SDK creates default requestHandler which has 'config' property
-      expect(s3.config.requestHandler).to.have.property("config");
+      // SDK creates default requestHandler which uses standard Agent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("Agent");
     });
 
-    it("should handle multiple non-wildcard patterns in enabled", () => {
+    it("should handle multiple non-wildcard patterns in enabled", async () => {
       process.env.TURBOT_CONFIG_ENV = JSON.stringify({
         aws: {
           proxy: {
@@ -317,25 +321,28 @@ describe("connect", () => {
       });
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
-      // Custom requestHandler (with proxy) doesn't have 'config' property
-      expect(s3.config.requestHandler).not.to.have.property("config");
+      // Custom requestHandler (with proxy) has HttpsProxyAgent
+      const s3Cfg = await s3.config.requestHandler.configProvider;
+      expect(s3Cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
 
       const cw = taws.connect(CloudWatchClient, { region: "us-east-1" });
       expect(cw).to.be.instanceOf(CloudWatchClient);
-      // Custom requestHandler (with proxy) doesn't have 'config' property
-      expect(cw.config.requestHandler).not.to.have.property("config");
+      // Custom requestHandler (with proxy) has HttpsProxyAgent
+      const cwCfg = await cw.config.requestHandler.configProvider;
+      expect(cwCfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
     });
 
-    it("should handle both https_proxy and HTTPS_PROXY set (lowercase wins)", () => {
+    it("should handle both https_proxy and HTTPS_PROXY set (lowercase wins)", async () => {
       process.env.https_proxy = "http://lowercase-proxy:8080";
       process.env.HTTPS_PROXY = "http://uppercase-proxy:8080";
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
-      // Custom requestHandler (with proxy) doesn't have 'config' property
-      expect(s3.config.requestHandler).not.to.have.property("config");
+      // Custom requestHandler (with proxy) has HttpsProxyAgent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
     });
 
-    it("should handle mixed case in disabled patterns", () => {
+    it("should handle mixed case in disabled patterns", async () => {
       process.env.TURBOT_CONFIG_ENV = JSON.stringify({
         aws: {
           proxy: {
@@ -347,16 +354,18 @@ describe("connect", () => {
       });
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
-      // SDK creates default requestHandler which has 'config' property
-      expect(s3.config.requestHandler).to.have.property("config");
+      // SDK creates default requestHandler which uses standard Agent
+      const s3Cfg = await s3.config.requestHandler.configProvider;
+      expect(s3Cfg.httpsAgent.constructor.name).to.equal("Agent");
 
       const cw = taws.connect(CloudWatchClient, { region: "us-east-1" });
       expect(cw).to.be.instanceOf(CloudWatchClient);
-      // SDK creates default requestHandler which has 'config' property
-      expect(cw.config.requestHandler).to.have.property("config");
+      // SDK creates default requestHandler which uses standard Agent
+      const cwCfg = await cw.config.requestHandler.configProvider;
+      expect(cwCfg.httpsAgent.constructor.name).to.equal("Agent");
     });
 
-    it("should handle overlapping specific patterns (disabled wins)", () => {
+    it("should handle overlapping specific patterns (disabled wins)", async () => {
       process.env.TURBOT_CONFIG_ENV = JSON.stringify({
         aws: {
           proxy: {
@@ -368,32 +377,36 @@ describe("connect", () => {
       });
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
-      // SDK creates default requestHandler which has 'config' property
-      expect(s3.config.requestHandler).to.have.property("config");
+      // SDK creates default requestHandler which uses standard Agent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("Agent");
     });
 
-    it("should handle proxy URL with authentication", () => {
+    it("should handle proxy URL with authentication", async () => {
       process.env.HTTPS_PROXY = "http://user:password@proxy:8080";
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
-      // Custom requestHandler (with proxy) doesn't have 'config' property
-      expect(s3.config.requestHandler).not.to.have.property("config");
+      // Custom requestHandler (with proxy) has HttpsProxyAgent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
     });
 
-    it("should handle proxy URL with special characters in password", () => {
+    it("should handle proxy URL with special characters in password", async () => {
       process.env.HTTPS_PROXY = "http://user:p%40ssw0rd@proxy:8080";
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
-      // Custom requestHandler (with proxy) doesn't have 'config' property
-      expect(s3.config.requestHandler).not.to.have.property("config");
+      // Custom requestHandler (with proxy) has HttpsProxyAgent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
     });
 
-    it("should handle non-standard protocols gracefully", () => {
+    it("should handle non-standard protocols gracefully", async () => {
       process.env.HTTPS_PROXY = "socks5://proxy:1080";
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
-      // Custom requestHandler (with proxy) doesn't have 'config' property
-      expect(s3.config.requestHandler).not.to.have.property("config");
+      // Custom requestHandler (with proxy) has HttpsProxyAgent
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
     });
   });
 
