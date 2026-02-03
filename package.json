@@ -10,11 +10,11 @@
     "test": "npx mocha"
   },
   "dependencies": {
-    "@turbot/errors": "5.3.0",
-    "@turbot/log": "5.5.0",
     "@aws-sdk/credential-providers": "3.978.0",
     "@smithy/node-http-handler": "4.4.8",
     "@smithy/util-retry": "4.2.8",
+    "@turbot/errors": "5.3.0",
+    "@turbot/log": "5.5.0",
     "aws4": "1.13.2",
     "https-proxy-agent": "7.0.6",
     "lodash": "4.17.23",
@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-cloudwatch": "3.978.0",
-    "@aws-sdk/client-s3": "3.978.0",
+    "@aws-sdk/client-s3": "3.981.0",
     "@aws-sdk/client-sts": "3.978.0",
     "@aws-sdk/credential-providers": "3.978.0",
     "chai": "4.5.0",
