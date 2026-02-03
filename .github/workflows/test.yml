@@ -3,6 +3,7 @@ name: Tests
 on:
   pull_request:
     branches: [develop, merge-aws-sdk-functionality]
+  workflow_dispatch:
 
 jobs:
   test:
