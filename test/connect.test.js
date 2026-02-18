@@ -3,17 +3,27 @@ const { S3Client } = require("@aws-sdk/client-s3");
 const taws = require("../index");
 
 describe("connect", () => {
-  let originalEnv;
+  let savedAwsDefaultRegion, savedHttpsProxy, savedHttpsProxyLower;
+  let hadAwsDefaultRegion, hadHttpsProxy, hadHttpsProxyLower;
 
   beforeEach(() => {
-    originalEnv = { ...process.env };
+    hadAwsDefaultRegion = "AWS_DEFAULT_REGION" in process.env;
+    hadHttpsProxy = "HTTPS_PROXY" in process.env;
+    hadHttpsProxyLower = "https_proxy" in process.env;
+
+    savedAwsDefaultRegion = process.env.AWS_DEFAULT_REGION;
+    savedHttpsProxy = process.env.HTTPS_PROXY;
+    savedHttpsProxyLower = process.env.https_proxy;
+
     delete process.env.AWS_DEFAULT_REGION;
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    if (hadAwsDefaultRegion) { process.env.AWS_DEFAULT_REGION = savedAwsDefaultRegion; } else { delete process.env.AWS_DEFAULT_REGION; }
+    if (hadHttpsProxy) { process.env.HTTPS_PROXY = savedHttpsProxy; } else { delete process.env.HTTPS_PROXY; }
+    if (hadHttpsProxyLower) { process.env.https_proxy = savedHttpsProxyLower; } else { delete process.env.https_proxy; }
   });
 
   describe("when setting user agent", () => {

@@ -65,7 +65,7 @@ const connect = function (serviceClient, params, opts = {}) {
   }
 
   if (params.retryStrategy == null) {
-    params.retryStrategy = new CustomRetryStrategy(params.maxAttempts || defaultMaxRetries);
+    params.retryStrategy = new CustomRetryStrategy(params.maxAttempts);
   }
 
   return new serviceClient(params);
