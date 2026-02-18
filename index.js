@@ -5,7 +5,7 @@ const log = require("@turbot/log");
 const { HttpsProxyAgent } = require("https-proxy-agent");
 const { NodeHttpHandler } = require("@aws-sdk/node-http-handler");
 const { StandardRetryStrategy } = require("@aws-sdk/util-retry");
-const { URL } = require("url");
+const aws4 = require("aws4");
 
 const defaultMaxRetries = 3;
 
@@ -34,7 +34,7 @@ const proxyAgent = () => {
   return agent;
 };
 
-const connect = function (serviceClient, params, opts = {}) {
+const connect = function (serviceClient, params, _opts = {}) {
   if (!params) params = {};
 
   // If running in Lambda setup, set the default region based on the:
@@ -104,8 +104,9 @@ class CustomRetryStrategy extends StandardRetryStrategy {
     super(async () => maxAttempts);
   }
 
-  // Override the `delayDecider` method to use the custom backoff function
-  delayDecider(delayBase, attemptCount) {
+  // Override the `delayDecider` method to use the custom backoff function.
+  // _delayBase is required by the StandardRetryStrategy interface but unused.
+  delayDecider(_delayBase, attemptCount) {
     return defaultCustomBackoff(attemptCount); // Use the custom backoff logic
   }
 }
@@ -149,8 +150,9 @@ class CustomDiscoveryRetryStrategy extends StandardRetryStrategy {
     super(async () => maxAttempts);
   }
 
-  // Override the `delayDecider` method to use the custom backoff function
-  delayDecider(delayBase, attemptCount) {
+  // Override the `delayDecider` method to use the custom backoff function.
+  // _delayBase is required by the StandardRetryStrategy interface but unused.
+  delayDecider(_delayBase, attemptCount) {
     return customBackoffForDiscovery(attemptCount); // Use the custom backoff logic
   }
 }
