@@ -10,42 +10,31 @@
     "test": "npx mocha"
   },
   "dependencies": {
-    "@turbot/errors": "5.3.0",
-    "@turbot/log": "5.5.0",
     "@aws-sdk/node-http-handler": "3.374.0",
     "@aws-sdk/util-retry": "3.374.0",
+    "@turbot/errors": "5.3.0",
+    "@turbot/log": "5.5.0",
     "aws4": "1.13.2",
     "https-proxy-agent": "7.0.5"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "3.981.0",
+    "@eslint/js": "10.0.1",
     "chai": "4.3.10",
-    "eslint": "7.28.0",
-    "eslint-config-prettier": "8.3.0",
-    "eslint-plugin-prettier": "3.4.0",
-    "eslint-plugin-you-dont-need-lodash-underscore": "6.12.0",
+    "eslint": "10.0.2",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-prettier": "5.5.5",
+    "eslint-plugin-you-dont-need-lodash-underscore": "6.14.0",
+    "globals": "17.3.0",
     "mocha": "11.7.5",
-    "prettier": "2.3.1",
-    "test-console": "1.1.0"
+    "prettier": "3.8.1"
   },
-  "eslintConfig": {
-    "extends": [
-      "plugin:prettier/recommended",
-      "eslint:recommended",
-      "plugin:you-dont-need-lodash-underscore/compatible"
-    ],
-    "env": {
-      "es6": true,
-      "node": true,
-      "mocha": true
-    },
-    "parserOptions": {
-      "ecmaVersion": 10
-    },
-    "rules": {
-      "no-console": "off",
-      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
-    }
+  "overrides": {
+    "fast-xml-parser": ">=5.3.6",
+    "lodash": ">=4.17.23",
+    "js-yaml": ">=3.14.2",
+    "diff": ">=8.0.3",
+    "minimatch": ">=10.2.1"
   },
   "prettier": {
     "printWidth": 120
