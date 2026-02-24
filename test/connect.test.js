@@ -121,6 +121,14 @@ describe("connect", () => {
       });
       expect(s3.config.customUserAgent).to.deep.equal([["CustomApp/1.0"]]);
     });
+
+    it("should preserve empty string user agent", () => {
+      const s3 = taws.connect(S3Client, {
+        region: "us-east-1",
+        customUserAgent: "",
+      });
+      expect(s3.config.customUserAgent).to.deep.equal([[""]]);
+    });
   });
 
   describe("when configuring retry strategy", () => {
@@ -137,6 +145,15 @@ describe("connect", () => {
       });
       const maxAttempts = await s3.config.maxAttempts();
       expect(maxAttempts).to.equal(21);
+    });
+
+    it("should preserve maxAttempts of 0", async () => {
+      const s3 = taws.connect(S3Client, {
+        region: "us-east-1",
+        maxAttempts: 0,
+      });
+      const maxAttempts = await s3.config.maxAttempts();
+      expect(maxAttempts).to.equal(0);
     });
 
     it("should use CustomRetryStrategy by default", async () => {
@@ -255,6 +272,25 @@ describe("connect", () => {
 
       const s3 = taws.connect(S3Client, { region: "us-east-1" });
       expect(s3).to.be.instanceOf(S3Client);
+    });
+
+    it("should use config proxy URL over env var", async () => {
+      process.env.HTTPS_PROXY = "http://env-proxy:9999";
+      process.env.TURBOT_CONFIG_ENV = JSON.stringify({
+        aws: {
+          proxy: {
+            https_proxy: "http://config-proxy:8080",
+            enabled: ["*"],
+            disabled: [],
+          },
+        },
+      });
+
+      const s3 = taws.connect(S3Client, { region: "us-east-1" });
+      // Proxy should be from config, not env var
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
+      expect(cfg.httpsAgent.proxy.hostname).to.equal("config-proxy");
     });
   });
 
@@ -410,30 +446,51 @@ describe("connect", () => {
   });
 
   describe("when in development mode", () => {
-    it("should use dev profile when in local-development mode", () => {
+    it("should use dev region when in local-development mode", async () => {
       process.env.NODE_ENV = "local-development";
       process.env.TURBOT_DEV_PROFILE = "test-profile";
       process.env.TURBOT_DEV_MASTER_REGION = "us-west-2";
 
       const s3 = taws.connect(S3Client, {});
-      expect(s3).to.be.instanceOf(S3Client);
+      const region = await s3.config.region();
+      expect(region).to.equal("us-west-2");
     });
 
-    it("should not use dev profile in production mode", () => {
+    it("should not use dev region in production mode", async () => {
       process.env.NODE_ENV = "production";
       process.env.TURBOT_DEV_PROFILE = "test-profile";
+      process.env.TURBOT_DEV_MASTER_REGION = "us-west-2";
       process.env.AWS_DEFAULT_REGION = "us-east-1";
 
       const s3 = taws.connect(S3Client, {});
-      expect(s3).to.be.instanceOf(S3Client);
+      const region = await s3.config.region();
+      expect(region).to.equal("us-east-1");
     });
 
-    it("should prefer explicit params over dev settings", () => {
+    it("should prefer explicit region over dev region", async () => {
       process.env.NODE_ENV = "local-development";
       process.env.TURBOT_DEV_MASTER_REGION = "us-west-2";
 
       const s3 = taws.connect(S3Client, { region: "eu-west-1" });
+      const region = await s3.config.region();
+      expect(region).to.equal("eu-west-1");
+    });
+
+    it("should not override explicit credentials in dev mode", async () => {
+      process.env.NODE_ENV = "local-development";
+      process.env.TURBOT_DEV_PROFILE = "test-profile";
+      process.env.TURBOT_DEV_MASTER_REGION = "us-west-2";
+
+      const explicitCreds = {
+        accessKeyId: "AKIAEXPLICIT",
+        secretAccessKey: "explicitSecret",
+      };
+      const s3 = taws.connect(S3Client, { credentials: explicitCreds });
       expect(s3).to.be.instanceOf(S3Client);
+      // SDK wraps credentials in a resolver; resolve and verify the values
+      const resolved = await s3.config.credentials();
+      expect(resolved.accessKeyId).to.equal("AKIAEXPLICIT");
+      expect(resolved.secretAccessKey).to.equal("explicitSecret");
     });
   });
 
