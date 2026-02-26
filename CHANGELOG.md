@@ -2,13 +2,10 @@
 
 # Release History
 
-## 5.0.2 [TBD]
+## 5.1.0 [2026-02-27]
 
-- Enhanced proxy configuration with wildcard pattern support for per-service control
-- Added `TURBOT_CONFIG_ENV` environment variable support for JSON-based configuration
-- Improved region fallback with 3-level precedence (params → env var → config)
-- Added development mode with automatic profile selection
-- Exported `CustomRetryStrategy` class
+- Added: Wildcard proxy patterns, `TURBOT_CONFIG_ENV` support, region fallback, development mode, and exported `CustomRetryStrategy`. (#9)
+- Fixed: `_.isEmpty` misuse in `connect()` default parameters. (#14)
 
 ## 5.0.1 [2024-12-11]
 
