@@ -1,5 +1,7 @@
 # @turbot/guardrails-aws-sdk-v3
 
+![Tests](https://github.com/turbot/guardrails-aws-sdk-v3/actions/workflows/test.yml/badge.svg?branch=develop)
+
 A lightweight, Turbot-optimized wrapper around AWS SDK v3, designed to simplify and standardize AWS interactions within Guardrails. This wrapper provides intelligent defaults, automatic configuration detection, and enterprise-ready features.
 
 ## Features
