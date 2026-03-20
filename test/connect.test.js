@@ -445,6 +445,129 @@ describe("connect", () => {
     });
   });
 
+  describe("when parsing TURBOT_CONFIG_ENV edge cases", () => {
+    it("should handle empty JSON object gracefully", async () => {
+      process.env.TURBOT_CONFIG_ENV = "{}";
+      process.env.AWS_DEFAULT_REGION = "us-east-1";
+
+      const s3 = taws.connect(S3Client, {});
+      expect(s3).to.be.instanceOf(S3Client);
+      const region = await s3.config.region();
+      expect(region).to.equal("us-east-1");
+      // No proxy should be configured since aws.proxy is undefined
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("Agent");
+    });
+  });
+
+  describe("when proxy config has missing enabled/disabled keys", () => {
+    it("should default enabled to ['*'] when not specified", async () => {
+      process.env.TURBOT_CONFIG_ENV = JSON.stringify({
+        aws: {
+          proxy: {
+            https_proxy: "http://proxy:8080",
+          },
+        },
+      });
+      const s3 = taws.connect(S3Client, { region: "us-east-1" });
+      // enabled defaults to ["*"], disabled defaults to [], so proxy should be applied
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
+    });
+
+    it("should default disabled to [] when not specified", async () => {
+      process.env.TURBOT_CONFIG_ENV = JSON.stringify({
+        aws: {
+          proxy: {
+            https_proxy: "http://proxy:8080",
+            enabled: ["s3"],
+          },
+        },
+      });
+      const s3 = taws.connect(S3Client, { region: "us-east-1" });
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
+    });
+  });
+
+  describe("when proxy config https_proxy is null and env var is set", () => {
+    it("should fall back to HTTPS_PROXY env var when config https_proxy is null", async () => {
+      process.env.HTTPS_PROXY = "http://env-proxy:8080";
+      process.env.TURBOT_CONFIG_ENV = JSON.stringify({
+        aws: {
+          proxy: {
+            https_proxy: null,
+            enabled: ["*"],
+            disabled: [],
+          },
+        },
+      });
+      const s3 = taws.connect(S3Client, { region: "us-east-1" });
+      const cfg = await s3.config.requestHandler.configProvider;
+      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
+      expect(cfg.httpsAgent.proxy.hostname).to.equal("env-proxy");
+    });
+  });
+
+  describe("when proxyAgent is called with null serviceClient", () => {
+    it("should return proxy without checking enabled/disabled patterns", () => {
+      const turbotConfig = {
+        aws: {
+          proxy: {
+            https_proxy: "http://proxy:8080",
+            enabled: ["ec2"],
+            disabled: ["s3"],
+          },
+        },
+      };
+      // With a real service like S3, this config would return null (disabled).
+      // With null serviceClient, the enabled/disabled check is skipped entirely.
+      const agent = taws._proxyAgent(null, turbotConfig);
+      expect(agent).to.not.be.null;
+      expect(agent.constructor.name).to.equal("HttpsProxyAgent");
+    });
+
+    it("should return null when no proxy URL is configured", () => {
+      const agent = taws._proxyAgent(null, {});
+      expect(agent).to.be.null;
+    });
+  });
+
+  describe("when proxy URL is empty string", () => {
+    it("should return null since empty string is falsy", () => {
+      const turbotConfig = {
+        aws: {
+          proxy: {
+            https_proxy: "",
+            enabled: ["*"],
+            disabled: [],
+          },
+        },
+      };
+      const agent = taws._proxyAgent(S3Client, turbotConfig);
+      expect(agent).to.be.null;
+    });
+  });
+
+  describe("when using discoveryParams with connect", () => {
+    it("should create a client with discovery retry strategy", async () => {
+      const params = taws.discoveryParams("us-east-1");
+      const s3 = taws.connect(S3Client, params);
+      expect(s3).to.be.instanceOf(S3Client);
+      const strategy = await s3.config.retryStrategy();
+      expect(strategy).to.be.instanceOf(taws.CustomDiscoveryRetryStrategy);
+      const maxAttempts = await s3.config.maxAttempts();
+      expect(maxAttempts).to.equal(10);
+    });
+
+    it("should use discovery region from discoveryParams", async () => {
+      const params = taws.discoveryParams("ap-northeast-1");
+      const s3 = taws.connect(S3Client, params);
+      const region = await s3.config.region();
+      expect(region).to.equal("ap-northeast-1");
+    });
+  });
+
   describe("when in development mode", () => {
     it("should use dev region when in local-development mode", async () => {
       process.env.NODE_ENV = "local-development";
@@ -476,6 +599,27 @@ describe("connect", () => {
       expect(region).to.equal("eu-west-1");
     });
 
+    it("should set dev region without loading credentials when TURBOT_DEV_PROFILE is absent", async () => {
+      process.env.NODE_ENV = "local-development";
+      process.env.TURBOT_DEV_MASTER_REGION = "us-west-2";
+      // No TURBOT_DEV_PROFILE set
+
+      const s3 = taws.connect(S3Client, {});
+      const region = await s3.config.region();
+      expect(region).to.equal("us-west-2");
+    });
+
+    it("should not set dev region when TURBOT_DEV_MASTER_REGION is absent", async () => {
+      process.env.NODE_ENV = "local-development";
+      process.env.TURBOT_DEV_PROFILE = "test-profile";
+      process.env.AWS_DEFAULT_REGION = "eu-west-1";
+      // No TURBOT_DEV_MASTER_REGION set
+
+      const s3 = taws.connect(S3Client, {});
+      const region = await s3.config.region();
+      expect(region).to.equal("eu-west-1");
+    });
+
     it("should not override explicit credentials in dev mode", async () => {
       process.env.NODE_ENV = "local-development";
       process.env.TURBOT_DEV_PROFILE = "test-profile";
@@ -491,6 +635,34 @@ describe("connect", () => {
       const resolved = await s3.config.credentials();
       expect(resolved.accessKeyId).to.equal("AKIAEXPLICIT");
       expect(resolved.secretAccessKey).to.equal("explicitSecret");
+    });
+  });
+
+  describe("when params are explicitly null", () => {
+    it("should apply default customUserAgent when set to null", () => {
+      const s3 = taws.connect(S3Client, {
+        region: "us-east-1",
+        customUserAgent: null,
+      });
+      expect(s3.config.customUserAgent).to.deep.equal([["Turbot/5 (APN_137229)"]]);
+    });
+
+    it("should apply default retryStrategy when set to null", async () => {
+      const s3 = taws.connect(S3Client, {
+        region: "us-east-1",
+        retryStrategy: null,
+      });
+      const strategy = await s3.config.retryStrategy();
+      expect(strategy).to.be.instanceOf(taws.CustomRetryStrategy);
+    });
+
+    it("should apply default maxAttempts when set to null", async () => {
+      const s3 = taws.connect(S3Client, {
+        region: "us-east-1",
+        maxAttempts: null,
+      });
+      const maxAttempts = await s3.config.maxAttempts();
+      expect(maxAttempts).to.equal(3);
     });
   });
 
