@@ -238,7 +238,12 @@ const awsIamSignedRequest = (opts, service, credentials, callback) => {
   };
 
   // Parse the URL to get the hostname and path
-  const url = new URL(opts.uri);
+  let url;
+  try {
+    url = new URL(opts.uri);
+  } catch (e) {
+    return callback(e);
+  }
   const hostname = url.hostname;
   const path = url.pathname + url.search;
 
@@ -248,7 +253,7 @@ const awsIamSignedRequest = (opts, service, credentials, callback) => {
     method: opts.method,
     headers: {
       ...opts.headers,
-      host: new URL(opts.uri).hostname.toString(),
+      host: hostname,
     },
     body: opts.body ? JSON.stringify(opts.body) : null,
     service: service,
