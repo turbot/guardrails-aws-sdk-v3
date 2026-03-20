@@ -104,6 +104,28 @@ describe("retryStrategies", () => {
     });
   });
 
+  describe("when resolving maxAttempts provider", () => {
+    it("should invoke the maxAttempts callback in CustomRetryStrategy", async () => {
+      const strategy = new taws.CustomRetryStrategy(3);
+      const token = await strategy.acquireInitialRetryToken("test");
+      const newToken = await strategy.refreshRetryTokenForRetry(token, {
+        errorType: "TRANSIENT",
+      });
+      expect(newToken).to.exist;
+      expect(newToken.getRetryCount()).to.equal(1);
+    });
+
+    it("should invoke the maxAttempts callback in CustomDiscoveryRetryStrategy", async () => {
+      const strategy = new taws.CustomDiscoveryRetryStrategy(10);
+      const token = await strategy.acquireInitialRetryToken("test");
+      const newToken = await strategy.refreshRetryTokenForRetry(token, {
+        errorType: "TRANSIENT",
+      });
+      expect(newToken).to.exist;
+      expect(newToken.getRetryCount()).to.equal(1);
+    });
+  });
+
   describe("when using customBackoff function", () => {
     it("should be exported as customBackoffForDiscovery", () => {
       expect(taws.customBackoff).to.be.a("function");
