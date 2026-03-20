@@ -279,6 +279,7 @@ module.exports = {
   connect,
   customBackoff: customBackoffForDiscovery,
   discoveryParams,
+  proxyAgent,
   CustomRetryStrategy,
   CustomDiscoveryRetryStrategy,
 };

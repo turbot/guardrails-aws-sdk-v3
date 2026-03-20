@@ -509,14 +509,43 @@ describe("connect", () => {
     });
   });
 
-  describe("when serviceClient is null", () => {
-    it("should skip service matching and return proxy unconditionally", async () => {
-      process.env.HTTPS_PROXY = "http://proxy:8080";
-      // connect always passes a serviceClient, but proxyAgent handles null
-      // We test this path by calling connect with a class that has no name filtering issues
-      const s3 = taws.connect(S3Client, { region: "us-east-1" });
-      const cfg = await s3.config.requestHandler.configProvider;
-      expect(cfg.httpsAgent.constructor.name).to.equal("HttpsProxyAgent");
+  describe("when proxyAgent is called with null serviceClient", () => {
+    it("should return proxy without checking enabled/disabled patterns", () => {
+      const turbotConfig = {
+        aws: {
+          proxy: {
+            https_proxy: "http://proxy:8080",
+            enabled: ["ec2"],
+            disabled: ["s3"],
+          },
+        },
+      };
+      // With a real service like S3, this config would return null (disabled).
+      // With null serviceClient, the enabled/disabled check is skipped entirely.
+      const agent = taws.proxyAgent(null, turbotConfig);
+      expect(agent).to.not.be.null;
+      expect(agent.constructor.name).to.equal("HttpsProxyAgent");
+    });
+
+    it("should return null when no proxy URL is configured", () => {
+      const agent = taws.proxyAgent(null, {});
+      expect(agent).to.be.null;
+    });
+  });
+
+  describe("when proxy URL is empty string", () => {
+    it("should return null since empty string is falsy", () => {
+      const turbotConfig = {
+        aws: {
+          proxy: {
+            https_proxy: "",
+            enabled: ["*"],
+            disabled: [],
+          },
+        },
+      };
+      const agent = taws.proxyAgent(S3Client, turbotConfig);
+      expect(agent).to.be.null;
     });
   });
 
@@ -606,6 +635,34 @@ describe("connect", () => {
       const resolved = await s3.config.credentials();
       expect(resolved.accessKeyId).to.equal("AKIAEXPLICIT");
       expect(resolved.secretAccessKey).to.equal("explicitSecret");
+    });
+  });
+
+  describe("when params are explicitly null", () => {
+    it("should apply default customUserAgent when set to null", () => {
+      const s3 = taws.connect(S3Client, {
+        region: "us-east-1",
+        customUserAgent: null,
+      });
+      expect(s3.config.customUserAgent).to.deep.equal([["Turbot/5 (APN_137229)"]]);
+    });
+
+    it("should apply default retryStrategy when set to null", async () => {
+      const s3 = taws.connect(S3Client, {
+        region: "us-east-1",
+        retryStrategy: null,
+      });
+      const strategy = await s3.config.retryStrategy();
+      expect(strategy).to.be.instanceOf(taws.CustomRetryStrategy);
+    });
+
+    it("should apply default maxAttempts when set to null", async () => {
+      const s3 = taws.connect(S3Client, {
+        region: "us-east-1",
+        maxAttempts: null,
+      });
+      const maxAttempts = await s3.config.maxAttempts();
+      expect(maxAttempts).to.equal(3);
     });
   });
 

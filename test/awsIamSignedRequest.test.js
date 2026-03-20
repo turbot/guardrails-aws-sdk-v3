@@ -175,6 +175,27 @@ describe("awsIamSignedRequest", () => {
     });
   });
 
+  it("should handle credentials without SessionToken", (done) => {
+    nock("https://execute-api.us-east-1.amazonaws.com").get("/test").reply(200, { ok: true });
+
+    const opts = {
+      uri: "https://execute-api.us-east-1.amazonaws.com/test",
+      method: "GET",
+      headers: {},
+    };
+
+    const credentials = {
+      AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    };
+
+    taws.awsIamSignedRequest(opts, "execute-api", credentials, (error, body) => {
+      expect(error).to.be.null;
+      expect(body).to.deep.equal({ ok: true });
+      done();
+    });
+  });
+
   it("should call callback with error on non-JSON response", (done) => {
     nock("https://execute-api.us-east-1.amazonaws.com").get("/test").reply(200, "not json", {
       "Content-Type": "text/plain",
