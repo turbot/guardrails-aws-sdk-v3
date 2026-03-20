@@ -11,7 +11,7 @@ module.exports = [
       "you-dont-need-lodash-underscore": lodashPlugin,
     },
     languageOptions: {
-      ecmaVersion: 10,
+      ecmaVersion: 12,
       globals: {
         ...globals.node,
         ...globals.mocha,
