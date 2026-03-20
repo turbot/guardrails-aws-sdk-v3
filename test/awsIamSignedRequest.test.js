@@ -196,6 +196,26 @@ describe("awsIamSignedRequest", () => {
     });
   });
 
+  it("should call callback with error when URI is invalid", (done) => {
+    const opts = {
+      uri: "not-a-valid-url",
+      method: "GET",
+      headers: {},
+    };
+
+    const credentials = {
+      AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      SessionToken: "testSessionToken",
+    };
+
+    taws.awsIamSignedRequest(opts, "execute-api", credentials, (error) => {
+      expect(error).to.exist;
+      expect(error).to.be.an.instanceOf(TypeError);
+      done();
+    });
+  });
+
   it("should call callback with error on non-JSON response", (done) => {
     nock("https://execute-api.us-east-1.amazonaws.com").get("/test").reply(200, "not json", {
       "Content-Type": "text/plain",
