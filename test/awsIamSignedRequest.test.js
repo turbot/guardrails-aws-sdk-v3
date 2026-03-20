@@ -211,7 +211,7 @@ describe("awsIamSignedRequest", () => {
 
     taws.awsIamSignedRequest(opts, "execute-api", credentials, (error) => {
       expect(error).to.exist;
-      expect(error).to.be.an.instanceOf(TypeError);
+      expect(error.name).to.equal("TypeError");
       done();
     });
   });
