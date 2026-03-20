@@ -124,6 +124,35 @@ describe("awsIamSignedRequest", () => {
     });
   });
 
+  it("should handle POST with body and return parsed response", (done) => {
+    nock("https://execute-api.us-east-1.amazonaws.com")
+      .post("/test", JSON.stringify({ key: "value" }))
+      .reply(200, { received: true });
+
+    const opts = {
+      uri: "https://execute-api.us-east-1.amazonaws.com/test",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: {
+        key: "value",
+      },
+    };
+
+    const credentials = {
+      AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      SessionToken: "testSessionToken",
+    };
+
+    taws.awsIamSignedRequest(opts, "execute-api", credentials, (error, body) => {
+      expect(error).to.be.null;
+      expect(body).to.deep.equal({ received: true });
+      done();
+    });
+  });
+
   it("should call callback with error on network failure", (done) => {
     nock("https://execute-api.us-east-1.amazonaws.com").get("/test").replyWithError("connection refused");
 

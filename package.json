@@ -6,8 +6,8 @@
   "license": "Apache-2.0",
   "main": "index.js",
   "scripts": {
-    "coverage": "npx nyc npm test",
-    "test": "npx mocha"
+    "coverage": "nyc npm test",
+    "test": "mocha"
   },
   "dependencies": {
     "@smithy/node-http-handler": "4.5.0",
@@ -19,10 +19,10 @@
     "micromatch": "4.0.8"
   },
   "devDependencies": {
-    "@aws-sdk/credential-providers": "3.1012.0",
     "@aws-sdk/client-cloudwatch": "3.1012.0",
     "@aws-sdk/client-s3": "3.1012.0",
     "@aws-sdk/client-sts": "3.1012.0",
+    "@aws-sdk/credential-providers": "3.1012.0",
     "@eslint/js": "10.0.1",
     "chai": "4.5.0",
     "eslint": "10.0.3",
@@ -32,6 +32,7 @@
     "globals": "17.4.0",
     "mocha": "11.7.5",
     "nock": "14.0.11",
+    "nyc": "18.0.0",
     "prettier": "3.8.1"
   },
   "overrides": {
