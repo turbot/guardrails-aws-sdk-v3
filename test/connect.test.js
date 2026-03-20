@@ -522,13 +522,13 @@ describe("connect", () => {
       };
       // With a real service like S3, this config would return null (disabled).
       // With null serviceClient, the enabled/disabled check is skipped entirely.
-      const agent = taws.proxyAgent(null, turbotConfig);
+      const agent = taws._proxyAgent(null, turbotConfig);
       expect(agent).to.not.be.null;
       expect(agent.constructor.name).to.equal("HttpsProxyAgent");
     });
 
     it("should return null when no proxy URL is configured", () => {
-      const agent = taws.proxyAgent(null, {});
+      const agent = taws._proxyAgent(null, {});
       expect(agent).to.be.null;
     });
   });
@@ -544,7 +544,7 @@ describe("connect", () => {
           },
         },
       };
-      const agent = taws.proxyAgent(S3Client, turbotConfig);
+      const agent = taws._proxyAgent(S3Client, turbotConfig);
       expect(agent).to.be.null;
     });
   });
