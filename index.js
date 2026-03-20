@@ -36,17 +36,16 @@ const proxyAgent = (serviceClient, turbotConfig) => {
   // Check if this service should use the proxy
   if (serviceClient) {
     const serviceName = serviceClient.name.replace(/Client$/, "").toLowerCase();
-    const serviceLower = serviceName.toLowerCase();
 
     // Check if service is explicitly disabled
     const disabledServices = awsProxy.disabled.map((i) => i.toLowerCase());
-    if (micromatch.any(serviceLower, disabledServices)) {
+    if (micromatch.any(serviceName, disabledServices)) {
       return null;
     }
 
     // Check if service is enabled (must match at least one pattern)
     const enabledServices = awsProxy.enabled.map((i) => i.toLowerCase());
-    if (!micromatch.any(serviceLower, enabledServices)) {
+    if (!micromatch.any(serviceName, enabledServices)) {
       return null;
     }
   }
