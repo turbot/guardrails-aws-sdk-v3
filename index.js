@@ -231,6 +231,11 @@ const discoveryParams = (region) => {
   };
 };
 
+// Built-in fetch gave up after 300s waiting for headers or between body chunks
+// (undici's timeouts). awsIamSignedRequest applies the same 300s as one
+// deadline for the whole request, which its small JSON replies never approach.
+const defaultRequestTimeout = 300000;
+
 const awsIamSignedRequest = (opts, service, credentials, callback) => {
   const awsOptions = {
     aws: {
@@ -269,6 +274,18 @@ const awsIamSignedRequest = (opts, service, credentials, callback) => {
   // proxy agent connect() would give this service.
   const agent = proxyAgent({ name: service }, loadTurbotConfig());
 
+  // A connection reset mid-response errors both the request and the response,
+  // and the timeout can race either, so only the first outcome is reported.
+  let answered = false;
+  const answer = (error, body) => {
+    if (answered) {
+      return;
+    }
+    answered = true;
+    clearTimeout(timer);
+    callback(error, body);
+  };
+
   const req = https.request(
     {
       host: requestOptions.host,
@@ -281,20 +298,29 @@ const awsIamSignedRequest = (opts, service, credentials, callback) => {
     (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
-      res.on("error", callback);
+      res.on("error", answer);
       res.on("end", () => {
         let body;
         try {
           body = JSON.parse(Buffer.concat(chunks).toString());
         } catch (error) {
-          callback(error);
+          answer(error);
           return;
         }
-        callback(null, body);
+        answer(null, body);
       });
     },
   );
-  req.on("error", callback);
+  req.on("error", answer);
+
+  // https.request has no time limit of its own. While the proxy agent waits on
+  // a CONNECT, destroying the request reports nothing, so answer first.
+  const timeout = opts.timeout ?? defaultRequestTimeout;
+  const timer = setTimeout(() => {
+    answer(errors.timeout(`Request to ${url.hostname} timed out after ${timeout}ms`));
+    req.destroy();
+  }, timeout);
+
   if (requestOptions.body) {
     req.write(requestOptions.body);
   }

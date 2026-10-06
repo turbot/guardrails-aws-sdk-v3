@@ -1,5 +1,8 @@
+const fs = require("fs");
 const http = require("http");
+const https = require("https");
 const net = require("net");
+const path = require("path");
 const { expect } = require("chai");
 const nock = require("nock");
 const taws = require("../index");
@@ -321,6 +324,98 @@ describe("awsIamSignedRequest", () => {
         expect(error.code).to.equal("ECONNREFUSED");
         expect(error.port).to.equal(closedPort);
         done();
+      });
+    });
+
+    it("should time out once when the proxy never answers CONNECT", (done) => {
+      // A wedged proxy: it takes the tunnel request and never replies.
+      const held = [];
+      const stalledProxy = http.createServer();
+      stalledProxy.on("connect", (req, socket) => held.push(socket));
+      stalledProxy.listen(0, "127.0.0.1", () => {
+        process.env.HTTPS_PROXY = `http://127.0.0.1:${stalledProxy.address().port}`;
+
+        const calls = [];
+        taws.awsIamSignedRequest({ ...appsyncOpts, timeout: 100 }, "appsync", credentials, (error) => {
+          calls.push(error);
+        });
+
+        setTimeout(() => {
+          // Closing the tunnel makes the agent fail the request it gave up on,
+          // so a second callback would land before the assertions.
+          held.forEach((socket) => socket.destroy());
+          setTimeout(() => {
+            stalledProxy.close();
+            expect(held).to.have.length(1);
+            expect(calls).to.have.length(1);
+            expect(calls[0].message).to.include("timed out after 100ms");
+            done();
+          }, 100);
+        }, 500);
+      });
+    });
+  });
+
+  describe("when the connection resets mid-response", () => {
+    const credentials = {
+      AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    };
+
+    // A throwaway self-signed certificate for 127.0.0.1, trusted for these tests only.
+    const tls = {
+      key: fs.readFileSync(path.join(__dirname, "fixtures", "localhost-key.pem")),
+      cert: fs.readFileSync(path.join(__dirname, "fixtures", "localhost-cert.pem")),
+    };
+
+    let originalEnv;
+
+    before(() => {
+      nock.restore();
+      https.globalAgent.options.ca = tls.cert;
+    });
+
+    after(() => {
+      delete https.globalAgent.options.ca;
+      nock.activate();
+    });
+
+    beforeEach(() => {
+      originalEnv = { ...process.env };
+      delete process.env.HTTPS_PROXY;
+      delete process.env.https_proxy;
+      delete process.env.TURBOT_CONFIG_ENV;
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it("should call back once", (done) => {
+      // Send the headers and part of the body, then reset the TCP connection under TLS.
+      let tcpSocket;
+      const server = https.createServer(tls, (req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json", "Content-Length": "100" });
+        res.write('{"partial":');
+        setTimeout(() => tcpSocket.resetAndDestroy(), 50);
+      });
+      server.on("connection", (socket) => {
+        tcpSocket = socket;
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const opts = { uri: `https://127.0.0.1:${server.address().port}/graphql`, method: "GET", headers: {} };
+
+        const calls = [];
+        taws.awsIamSignedRequest(opts, "appsync", credentials, (error) => {
+          calls.push(error);
+        });
+
+        setTimeout(() => {
+          server.close();
+          expect(calls).to.have.length(1);
+          expect(calls[0].code).to.equal("ECONNRESET");
+          done();
+        }, 500);
       });
     });
   });

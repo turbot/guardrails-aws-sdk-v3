@@ -132,7 +132,7 @@ taws.awsIamSignedRequest(options, "appsync", credentials, (err, result) => {
 });
 ```
 
-The request goes through the same proxy that `connect()` would use, with the service name (`appsync` here) matched against the `enabled` / `disabled` patterns.
+The request goes through the same proxy that `connect()` would use, with the service name (`appsync` here) matched against the `enabled` / `disabled` patterns. To send it direct while other services use the proxy, add `appsync` to `disabled`.
 
 ### Development Mode
 
@@ -186,6 +186,7 @@ Makes a SigV4-signed HTTPS request to an AWS service, through the proxy `connect
   - `method` (string) - HTTP method
   - `headers` (object) - HTTP headers
   - `body` (object, optional) - Request body, sent as JSON
+  - `timeout` (number, optional) - Milliseconds before the request fails with a timeout error (default: 300000)
 - `service` (string) - AWS signing name (e.g. `appsync`), also matched against the proxy `enabled` / `disabled` patterns
 - `credentials` (object):
   - `AccessKeyId` (string) - AWS access key ID
