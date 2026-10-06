@@ -109,27 +109,30 @@ const ec2 = taws.connect(EC2Client, taws.discoveryParams({ region: "us-east-1" }
 
 ### IAM Signed Requests
 
-Make authenticated HTTP requests to AWS services:
+Make SigV4-signed HTTPS requests to AWS endpoints that have no SDK client, such as an AppSync GraphQL API:
 
 ```javascript
 const taws = require("@turbot/guardrails-aws-sdk-v3");
 
 const options = {
-  uri: "https://sts.us-east-1.amazonaws.com/",
+  uri: "https://example.appsync-api.us-east-1.amazonaws.com/graphql",
   method: "POST",
-  headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  body: { Action: "GetCallerIdentity", Version: "2011-06-15" },
-  aws: {
-    key: "AKIAIOSFODNN7EXAMPLE",
-    secret: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-  },
+  headers: { "Content-Type": "application/json" },
+  body: { query: "{ __typename }" },
 };
 
-taws.awsIamSignedRequest(options, (err, result) => {
+const credentials = {
+  AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+  SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+};
+
+taws.awsIamSignedRequest(options, "appsync", credentials, (err, result) => {
   if (err) console.error(err);
   else console.log(result);
 });
 ```
+
+The request goes through the same proxy that `connect()` would use, with the service name (`appsync` here) matched against the `enabled` / `disabled` patterns.
 
 ### Development Mode
 
@@ -172,9 +175,9 @@ Returns parameters optimized for AWS discovery operations (uses CustomDiscoveryR
 
 **Returns**: Configuration object with discovery retry strategy
 
-### `awsIamSignedRequest(options, callback)`
+### `awsIamSignedRequest(options, service, credentials, callback)`
 
-Makes an IAM-signed HTTP request to AWS services.
+Makes a SigV4-signed HTTPS request to an AWS service, through the proxy `connect()` would use for that service.
 
 **Parameters**:
 
@@ -182,12 +185,13 @@ Makes an IAM-signed HTTP request to AWS services.
   - `uri` (string) - Target AWS service URL
   - `method` (string) - HTTP method
   - `headers` (object) - HTTP headers
-  - `body` (object) - Request body
-  - `aws` (object):
-    - `key` (string) - AWS access key ID
-    - `secret` (string) - AWS secret access key
-    - `session` (string, optional) - AWS session token
-- `callback` (function) - Callback function (err, result)
+  - `body` (object, optional) - Request body, sent as JSON
+- `service` (string) - AWS signing name (e.g. `appsync`), also matched against the proxy `enabled` / `disabled` patterns
+- `credentials` (object):
+  - `AccessKeyId` (string) - AWS access key ID
+  - `SecretAccessKey` (string) - AWS secret access key
+  - `SessionToken` (string, optional) - AWS session token
+- `callback` (function) - Called with `(err, body)`, where `body` is the parsed JSON response
 
 ### `CustomRetryStrategy`
 

@@ -1,3 +1,5 @@
+const http = require("http");
+const net = require("net");
 const { expect } = require("chai");
 const nock = require("nock");
 const taws = require("../index");
@@ -52,7 +54,7 @@ describe("awsIamSignedRequest", () => {
       SessionToken: "testSessionToken",
     };
 
-    // Note: This will fail at fetch since it's not a real endpoint,
+    // Note: The request itself fails since it's not a real endpoint,
     // but it tests the signing logic up to that point
     taws.awsIamSignedRequest(opts, "execute-api", credentials, (error, body) => {
       // Expect error because endpoint doesn't exist
@@ -214,9 +216,112 @@ describe("awsIamSignedRequest", () => {
     };
 
     taws.awsIamSignedRequest(opts, "execute-api", credentials, (error) => {
-      // response.json() rejects on non-JSON, caught by .catch
+      // JSON.parse throws on a non-JSON body, which is passed to the callback
       expect(error).to.exist;
       done();
+    });
+  });
+
+  describe("with a proxy", () => {
+    const credentials = {
+      AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      SessionToken: "testSessionToken",
+    };
+
+    let originalEnv;
+    let proxyServer;
+    let proxyUrl;
+    let connects;
+    let closedPort;
+
+    before(async () => {
+      // nock's passthrough cannot drive an async agent such as HttpsProxyAgent,
+      // so these tests use real sockets on localhost instead.
+      nock.restore();
+
+      // A stand-in for Squid: record each CONNECT tunnel request, then refuse it.
+      proxyServer = http.createServer();
+      proxyServer.on("connect", (req, socket) => {
+        connects.push(req.url);
+        socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+      });
+      await new Promise((resolve) => proxyServer.listen(0, "127.0.0.1", resolve));
+      proxyUrl = `http://127.0.0.1:${proxyServer.address().port}`;
+
+      // A port with nothing listening, so a direct request fails fast with ECONNREFUSED.
+      const placeholder = net.createServer();
+      await new Promise((resolve) => placeholder.listen(0, "127.0.0.1", resolve));
+      closedPort = placeholder.address().port;
+      await new Promise((resolve) => placeholder.close(resolve));
+    });
+
+    after(async () => {
+      await new Promise((resolve) => proxyServer.close(resolve));
+      nock.activate();
+    });
+
+    beforeEach(() => {
+      originalEnv = { ...process.env };
+      delete process.env.HTTPS_PROXY;
+      delete process.env.https_proxy;
+      delete process.env.TURBOT_CONFIG_ENV;
+      connects = [];
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    const appsyncOpts = {
+      uri: "https://example.appsync-api.us-east-1.amazonaws.com/graphql",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: { query: "{ __typename }" },
+    };
+
+    it("should tunnel through HTTPS_PROXY", (done) => {
+      process.env.HTTPS_PROXY = proxyUrl;
+
+      taws.awsIamSignedRequest(appsyncOpts, "appsync", credentials, (error) => {
+        expect(connects).to.deep.equal(["example.appsync-api.us-east-1.amazonaws.com:443"]);
+        // The proxy refused the tunnel, so the request fails.
+        expect(error).to.exist;
+        done();
+      });
+    });
+
+    it("should tunnel through the proxy in TURBOT_CONFIG_ENV", (done) => {
+      process.env.TURBOT_CONFIG_ENV = JSON.stringify({ aws: { proxy: { https_proxy: proxyUrl } } });
+
+      taws.awsIamSignedRequest(appsyncOpts, "appsync", credentials, (error) => {
+        expect(connects).to.deep.equal(["example.appsync-api.us-east-1.amazonaws.com:443"]);
+        expect(error).to.exist;
+        done();
+      });
+    });
+
+    it("should go direct when the service is disabled in TURBOT_CONFIG_ENV", (done) => {
+      process.env.HTTPS_PROXY = proxyUrl;
+      process.env.TURBOT_CONFIG_ENV = JSON.stringify({ aws: { proxy: { disabled: ["appsync"] } } });
+
+      const opts = { ...appsyncOpts, uri: `https://127.0.0.1:${closedPort}/graphql` };
+      taws.awsIamSignedRequest(opts, "appsync", credentials, (error) => {
+        expect(connects).to.be.empty;
+        expect(error.code).to.equal("ECONNREFUSED");
+        expect(error.port).to.equal(closedPort);
+        done();
+      });
+    });
+
+    it("should go direct when no proxy is configured", (done) => {
+      const opts = { ...appsyncOpts, uri: `https://127.0.0.1:${closedPort}/graphql` };
+      taws.awsIamSignedRequest(opts, "appsync", credentials, (error) => {
+        expect(connects).to.be.empty;
+        expect(error.code).to.equal("ECONNREFUSED");
+        expect(error.port).to.equal(closedPort);
+        done();
+      });
     });
   });
 });
