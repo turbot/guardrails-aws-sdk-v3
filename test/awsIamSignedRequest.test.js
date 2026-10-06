@@ -1,7 +1,9 @@
+const { execFileSync } = require("child_process");
 const fs = require("fs");
 const http = require("http");
 const https = require("https");
 const net = require("net");
+const os = require("os");
 const path = require("path");
 const { expect } = require("chai");
 const nock = require("nock");
@@ -362,16 +364,48 @@ describe("awsIamSignedRequest", () => {
       SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     };
 
-    // A throwaway self-signed certificate for 127.0.0.1, trusted for these tests only.
-    const tls = {
-      key: fs.readFileSync(path.join(__dirname, "fixtures", "localhost-key.pem")),
-      cert: fs.readFileSync(path.join(__dirname, "fixtures", "localhost-cert.pem")),
-    };
-
+    let tls;
     let originalEnv;
 
-    before(() => {
+    before(function () {
+      // RSA key generation can be slow on a busy runner.
+      this.timeout(10000);
       nock.restore();
+
+      // A self-signed certificate for 127.0.0.1, made fresh each run so no private
+      // key is kept in the repo, and trusted for these tests only. A missing
+      // openssl fails this hook rather than skipping the test.
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aws-sdk-v3-test-"));
+      try {
+        execFileSync(
+          "openssl",
+          [
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            path.join(dir, "key.pem"),
+            "-out",
+            path.join(dir, "cert.pem"),
+            "-days",
+            "1",
+            "-subj",
+            "/CN=127.0.0.1",
+            "-addext",
+            "subjectAltName=IP:127.0.0.1",
+          ],
+          { stdio: ["ignore", "ignore", "pipe"] },
+        );
+        tls = {
+          key: fs.readFileSync(path.join(dir, "key.pem")),
+          cert: fs.readFileSync(path.join(dir, "cert.pem")),
+        };
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+
       https.globalAgent.options.ca = tls.cert;
     });
 
