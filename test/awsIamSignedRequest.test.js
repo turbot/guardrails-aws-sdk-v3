@@ -1,3 +1,10 @@
+const { execFileSync } = require("child_process");
+const fs = require("fs");
+const http = require("http");
+const https = require("https");
+const net = require("net");
+const os = require("os");
+const path = require("path");
 const { expect } = require("chai");
 const nock = require("nock");
 const taws = require("../index");
@@ -52,7 +59,7 @@ describe("awsIamSignedRequest", () => {
       SessionToken: "testSessionToken",
     };
 
-    // Note: This will fail at fetch since it's not a real endpoint,
+    // Note: The request itself fails since it's not a real endpoint,
     // but it tests the signing logic up to that point
     taws.awsIamSignedRequest(opts, "execute-api", credentials, (error, body) => {
       // Expect error because endpoint doesn't exist
@@ -214,9 +221,236 @@ describe("awsIamSignedRequest", () => {
     };
 
     taws.awsIamSignedRequest(opts, "execute-api", credentials, (error) => {
-      // response.json() rejects on non-JSON, caught by .catch
+      // JSON.parse throws on a non-JSON body, which is passed to the callback
       expect(error).to.exist;
       done();
+    });
+  });
+
+  describe("with a proxy", () => {
+    const credentials = {
+      AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      SessionToken: "testSessionToken",
+    };
+
+    let originalEnv;
+    let proxyServer;
+    let proxyUrl;
+    let connects;
+    let closedPort;
+
+    before(async () => {
+      // nock's passthrough cannot drive an async agent such as HttpsProxyAgent,
+      // so these tests use real sockets on localhost instead.
+      nock.restore();
+
+      // A stand-in for Squid: record each CONNECT tunnel request, then refuse it.
+      proxyServer = http.createServer();
+      proxyServer.on("connect", (req, socket) => {
+        connects.push(req.url);
+        socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+      });
+      await new Promise((resolve) => proxyServer.listen(0, "127.0.0.1", resolve));
+      proxyUrl = `http://127.0.0.1:${proxyServer.address().port}`;
+
+      // A port with nothing listening, so a direct request fails fast with ECONNREFUSED.
+      const placeholder = net.createServer();
+      await new Promise((resolve) => placeholder.listen(0, "127.0.0.1", resolve));
+      closedPort = placeholder.address().port;
+      await new Promise((resolve) => placeholder.close(resolve));
+    });
+
+    after(async () => {
+      await new Promise((resolve) => proxyServer.close(resolve));
+      nock.activate();
+    });
+
+    beforeEach(() => {
+      originalEnv = { ...process.env };
+      delete process.env.HTTPS_PROXY;
+      delete process.env.https_proxy;
+      delete process.env.TURBOT_CONFIG_ENV;
+      connects = [];
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    const appsyncOpts = {
+      uri: "https://example.appsync-api.us-east-1.amazonaws.com/graphql",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: { query: "{ __typename }" },
+    };
+
+    it("should tunnel through HTTPS_PROXY", (done) => {
+      process.env.HTTPS_PROXY = proxyUrl;
+
+      taws.awsIamSignedRequest(appsyncOpts, "appsync", credentials, (error) => {
+        expect(connects).to.deep.equal(["example.appsync-api.us-east-1.amazonaws.com:443"]);
+        // The proxy refused the tunnel, so the request fails.
+        expect(error).to.exist;
+        done();
+      });
+    });
+
+    it("should tunnel through the proxy in TURBOT_CONFIG_ENV", (done) => {
+      process.env.TURBOT_CONFIG_ENV = JSON.stringify({ aws: { proxy: { https_proxy: proxyUrl } } });
+
+      taws.awsIamSignedRequest(appsyncOpts, "appsync", credentials, (error) => {
+        expect(connects).to.deep.equal(["example.appsync-api.us-east-1.amazonaws.com:443"]);
+        expect(error).to.exist;
+        done();
+      });
+    });
+
+    it("should go direct when the service is disabled in TURBOT_CONFIG_ENV", (done) => {
+      process.env.HTTPS_PROXY = proxyUrl;
+      process.env.TURBOT_CONFIG_ENV = JSON.stringify({ aws: { proxy: { disabled: ["appsync"] } } });
+
+      const opts = { ...appsyncOpts, uri: `https://127.0.0.1:${closedPort}/graphql` };
+      taws.awsIamSignedRequest(opts, "appsync", credentials, (error) => {
+        expect(connects).to.be.empty;
+        expect(error.code).to.equal("ECONNREFUSED");
+        expect(error.port).to.equal(closedPort);
+        done();
+      });
+    });
+
+    it("should go direct when no proxy is configured", (done) => {
+      const opts = { ...appsyncOpts, uri: `https://127.0.0.1:${closedPort}/graphql` };
+      taws.awsIamSignedRequest(opts, "appsync", credentials, (error) => {
+        expect(connects).to.be.empty;
+        expect(error.code).to.equal("ECONNREFUSED");
+        expect(error.port).to.equal(closedPort);
+        done();
+      });
+    });
+
+    it("should time out once when the proxy never answers CONNECT", (done) => {
+      // A wedged proxy: it takes the tunnel request and never replies.
+      const held = [];
+      const stalledProxy = http.createServer();
+      stalledProxy.on("connect", (req, socket) => held.push(socket));
+      stalledProxy.listen(0, "127.0.0.1", () => {
+        process.env.HTTPS_PROXY = `http://127.0.0.1:${stalledProxy.address().port}`;
+
+        const calls = [];
+        taws.awsIamSignedRequest({ ...appsyncOpts, timeout: 100 }, "appsync", credentials, (error) => {
+          calls.push(error);
+        });
+
+        setTimeout(() => {
+          // Closing the tunnel makes the agent fail the request it gave up on,
+          // so a second callback would land before the assertions.
+          held.forEach((socket) => socket.destroy());
+          setTimeout(() => {
+            stalledProxy.close();
+            expect(held).to.have.length(1);
+            expect(calls).to.have.length(1);
+            expect(calls[0].message).to.include("timed out after 100ms");
+            done();
+          }, 100);
+        }, 500);
+      });
+    });
+  });
+
+  describe("when the connection resets mid-response", () => {
+    const credentials = {
+      AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    };
+
+    let tls;
+    let originalEnv;
+
+    before(function () {
+      // RSA key generation can be slow on a busy runner.
+      this.timeout(10000);
+      nock.restore();
+
+      // A self-signed certificate for 127.0.0.1, made fresh each run so no private
+      // key is kept in the repo, and trusted for these tests only. A missing
+      // openssl fails this hook rather than skipping the test.
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aws-sdk-v3-test-"));
+      try {
+        execFileSync(
+          "openssl",
+          [
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            path.join(dir, "key.pem"),
+            "-out",
+            path.join(dir, "cert.pem"),
+            "-days",
+            "1",
+            "-subj",
+            "/CN=127.0.0.1",
+            "-addext",
+            "subjectAltName=IP:127.0.0.1",
+          ],
+          { stdio: ["ignore", "ignore", "pipe"] },
+        );
+        tls = {
+          key: fs.readFileSync(path.join(dir, "key.pem")),
+          cert: fs.readFileSync(path.join(dir, "cert.pem")),
+        };
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+
+      https.globalAgent.options.ca = tls.cert;
+    });
+
+    after(() => {
+      delete https.globalAgent.options.ca;
+      nock.activate();
+    });
+
+    beforeEach(() => {
+      originalEnv = { ...process.env };
+      delete process.env.HTTPS_PROXY;
+      delete process.env.https_proxy;
+      delete process.env.TURBOT_CONFIG_ENV;
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it("should call back once", (done) => {
+      // Send the headers and part of the body, then reset the TCP connection under TLS.
+      let tcpSocket;
+      const server = https.createServer(tls, (req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json", "Content-Length": "100" });
+        res.write('{"partial":');
+        setTimeout(() => tcpSocket.resetAndDestroy(), 50);
+      });
+      server.on("connection", (socket) => {
+        tcpSocket = socket;
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const opts = { uri: `https://127.0.0.1:${server.address().port}/graphql`, method: "GET", headers: {} };
+
+        const calls = [];
+        taws.awsIamSignedRequest(opts, "appsync", credentials, (error) => {
+          calls.push(error);
+        });
+
+        setTimeout(() => {
+          server.close();
+          expect(calls).to.have.length(1);
+          expect(calls[0].code).to.equal("ECONNRESET");
+          done();
+        }, 500);
+      });
     });
   });
 });

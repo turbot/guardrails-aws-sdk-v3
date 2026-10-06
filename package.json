@@ -5,6 +5,10 @@
   "version": "5.1.1",
   "license": "Apache-2.0",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "coverage": "nyc npm test",
     "test": "mocha"

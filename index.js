@@ -1,5 +1,6 @@
 // Use CommonJS 'require' instead of 'import'
 
+const https = require("https");
 const errors = require("@turbot/errors");
 const log = require("@turbot/log");
 const { HttpsProxyAgent } = require("https-proxy-agent");
@@ -68,21 +69,25 @@ const proxyAgent = (serviceClient, turbotConfig) => {
   return agent;
 };
 
+// Parse TURBOT_CONFIG_ENV, which carries the region and proxy settings.
+const loadTurbotConfig = () => {
+  if (!process.env.TURBOT_CONFIG_ENV) {
+    return {};
+  }
+  try {
+    return JSON.parse(process.env.TURBOT_CONFIG_ENV);
+  } catch (e) {
+    log.error(errors.badConfiguration("Error parsing TURBOT_CONFIG_ENV", { error: e }));
+    return {};
+  }
+};
+
 const connect = function (serviceClient, params) {
   if (!params) {
     params = {};
   }
 
-  // Parse TURBOT_CONFIG_ENV
-  let turbotConfig = {};
-  if (process.env.TURBOT_CONFIG_ENV) {
-    try {
-      turbotConfig = JSON.parse(process.env.TURBOT_CONFIG_ENV);
-    } catch (e) {
-      log.error(errors.badConfiguration("Error parsing TURBOT_CONFIG_ENV", { error: e }));
-      turbotConfig = {};
-    }
-  }
+  const turbotConfig = loadTurbotConfig();
 
   // Development mode: load credentials from profile
   if (process.env.NODE_ENV === "local-development") {
@@ -226,6 +231,11 @@ const discoveryParams = (region) => {
   };
 };
 
+// Built-in fetch gave up after 300s waiting for headers or between body chunks
+// (undici's timeouts). awsIamSignedRequest applies the same 300s as one
+// deadline for the whole request, which its small JSON replies never approach.
+const defaultRequestTimeout = 300000;
+
 const awsIamSignedRequest = (opts, service, credentials, callback) => {
   const awsOptions = {
     aws: {
@@ -260,18 +270,61 @@ const awsIamSignedRequest = (opts, service, credentials, callback) => {
     sessionToken: awsOptions.aws.session,
   });
 
-  fetch(opts.uri, {
-    method: requestOptions.method,
-    headers: requestOptions.headers,
-    body: requestOptions.body,
-  })
-    .then((response) => response.json())
-    .then((body) => {
-      callback(null, body);
-    })
-    .catch((error) => {
-      callback(error);
-    });
+  // Built-in fetch ignores HTTPS_PROXY, so send with https.request and the same
+  // proxy agent connect() would give this service.
+  const agent = proxyAgent({ name: service }, loadTurbotConfig());
+
+  // A connection reset mid-response errors both the request and the response,
+  // and the timeout can race either, so only the first outcome is reported.
+  let answered = false;
+  const answer = (error, body) => {
+    if (answered) {
+      return;
+    }
+    answered = true;
+    clearTimeout(timer);
+    callback(error, body);
+  };
+
+  const req = https.request(
+    {
+      host: requestOptions.host,
+      port: url.port || undefined,
+      path: requestOptions.path,
+      method: requestOptions.method,
+      headers: requestOptions.headers,
+      agent: agent || undefined,
+    },
+    (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("error", answer);
+      res.on("end", () => {
+        let body;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString());
+        } catch (error) {
+          answer(error);
+          return;
+        }
+        answer(null, body);
+      });
+    },
+  );
+  req.on("error", answer);
+
+  // https.request has no time limit of its own. While the proxy agent waits on
+  // a CONNECT, destroying the request reports nothing, so answer first.
+  const timeout = opts.timeout ?? defaultRequestTimeout;
+  const timer = setTimeout(() => {
+    answer(errors.timeout(`Request to ${url.hostname} timed out after ${timeout}ms`));
+    req.destroy();
+  }, timeout);
+
+  if (requestOptions.body) {
+    req.write(requestOptions.body);
+  }
+  req.end();
 };
 
 module.exports = {
